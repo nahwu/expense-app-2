@@ -22,6 +22,29 @@ function isConnectivityError(error: unknown): error is { code: string } {
   return typeof maybeCode === "string" && connectivityErrorCodes.has(maybeCode);
 }
 
+function getErrorLogDetails(error: unknown) {
+  if (error instanceof Error) {
+    const errWithCode = error as Error & { code?: string };
+    return {
+      code: errWithCode.code,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+
+  if (typeof error === "object" && error !== null) {
+    const maybeCode = (error as { code?: unknown }).code;
+    const maybeMessage = (error as { message?: unknown }).message;
+    return {
+      code: typeof maybeCode === "string" ? maybeCode : undefined,
+      message: typeof maybeMessage === "string" ? maybeMessage : "Unknown database error object.",
+      rawError: error,
+    };
+  }
+
+  return { message: String(error) };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const payload = signUpSchema.parse(await request.json());
@@ -55,6 +78,7 @@ export async function POST(request: NextRequest) {
       return jsonError(400, "VALIDATION_ERROR", error.issues[0]?.message ?? "Invalid payload.");
     }
     if (isConnectivityError(error)) {
+      console.error("[auth/signup] Database connectivity error", getErrorLogDetails(error));
       return jsonError(
         503,
         "DATABASE_UNAVAILABLE",

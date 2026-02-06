@@ -17,7 +17,7 @@ This repo contains:
 - DSM 7.2+ with Container Manager installed.
 - Domain name (example: `nahwu.synology.me`) pointing to your public IP.
 - Router/NAT forwarding for:
-  - `443` -> NAS
+  - `3003` -> NAS
   - optional `80` -> NAS (certificate challenge/redirect)
 - A valid TLS certificate in DSM (`Control Panel` -> `Security` -> `Certificate`).
 
@@ -37,7 +37,7 @@ The compose command should run from this folder on NAS.
 
 ## Step 3: Create production env file
 
-In `/volume1/docker/expense-app/app`, create `.env`:
+In `/volume1/docker/expense-app/app`, create `.env.prod`:
 
 ```env
 NODE_ENV=production
@@ -50,19 +50,20 @@ POSTGRES_PASSWORD=replace_with_strong_password
 # Containerized web app uses Docker network hostname "db"
 DATABASE_URL=postgresql://expense_user:replace_with_strong_password@db:5432/expense_app
 
-NEXTAUTH_URL=https://nahwu.synology.me
+NEXTAUTH_URL=https://nahwu.synology.me:3003
+NEXTAUTH_URL_INTERNAL=http://127.0.0.1:3000
+AUTH_TRUST_HOST=true
 NEXTAUTH_SECRET=replace_with_long_random_secret
 ```
 
 Notes:
 - `NEXTAUTH_URL` must exactly match the public HTTPS URL.
+  If you use a non-default HTTPS port, include it (for example `:3003`).
+- `NEXTAUTH_URL_INTERNAL` should stay `http://127.0.0.1:3000` for in-container server-side auth calls.
+- `AUTH_TRUST_HOST=true` allows Auth.js to trust reverse-proxy forwarded host/protocol headers.
 - Use a long random `NEXTAUTH_SECRET`.
-- Keep `.env` out of git.
-- If you maintain `.env.prod`, rename it to `.env` before DSM UI deploy
-
-Recommended:
-- Keep template values in `.env.prod.example`.
-- Keep actual secrets in `.env.prod` (ignored by git).
+- Keep `.env.prod` out of git.
+- `DATABASE_URL` must use host `db` (not `localhost`) because the app runs in a container.
 
 ## Step 4: Start services
 
@@ -74,7 +75,7 @@ DSM Project UI method:
 3. Use compose file:
    - `docker-compose.synology.yml`
 4. Ensure env file exists as:
-   - `/volume1/docker/expense-app/app/.env`
+   - `/volume1/docker/expense-app/app/.env.prod`
 5. Deploy the project.
 
 
@@ -85,7 +86,7 @@ DSM path: `Control Panel` -> `Login Portal` -> `Advanced` -> `Reverse Proxy`.
 Create rule:
 - Source:
   - Protocol: `HTTPS`
-  - Hostname: `http://nahwu.synology.me/`
+  - Hostname: `nahwu.synology.me`
   - Port: `3003`
 - Destination:
   - Protocol: `HTTP`
@@ -95,11 +96,11 @@ Create rule:
 Enable WebSocket support.
 
 Certificate:
-- Assign your certificate to `http://nahwu.synology.me/`.
+- Assign your certificate to `nahwu.synology.me`.
 
 ## Step 6: First-time app setup
 
-- Open `https://http://nahwu.synology.me/signup`
+- Open `https://nahwu.synology.me:3003/signup`
 - Create first account.
 - Sign in and verify dashboard load.
 
@@ -117,15 +118,13 @@ Certificate:
 - Keep DSM and Container Manager updated.
 - Use strong unique DB password and `NEXTAUTH_SECRET`.
 - Enable DSM firewall and auto-block.
-- Expose only required inbound ports (typically `443`, optional `80`).
+- Expose only required inbound ports (for this setup: `3003`, optional `80`).
 
 ## Troubleshooting
 
 DSM says postgres variables are not set:
 - Use `docker-compose.synology.yml` for DSM Project UI.
-- Ensure file is named exactly `.env` in project folder (not only `.env.prod`).
-- If you keep `.env.prod`, copy it first:
-  - `cp .env.prod .env`
+- Ensure file is named exactly `.env.prod` in the project folder.
 - `docker-compose.synology.yml` does not use `${POSTGRES_*}` interpolation.
   If DSM still shows `${POSTGRES_*}` errors, it is using an old compose file/project.
   Delete the old DSM Project and recreate it from `docker-compose.synology.yml`.
@@ -138,4 +137,22 @@ DSM says postgres variables are not set:
   - `docker compose logs --tail=200 db`
 - Confirm public app is up:
   - `curl http://127.0.0.1:3000/api/health`
-- Confirm `.env` values (`POSTGRES_*`, `DATABASE_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`) are correct.
+- Confirm `.env.prod` values (`POSTGRES_*`, `DATABASE_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`) are correct.
+- Verify app container sees Docker DNS host `db`:
+  - `docker compose exec web sh -lc 'echo "$DATABASE_URL"'`
+  - The URL should look like `postgresql://...@db:5432/expense_app`.
+
+Registration redirects to `/api/auth/signin?csrf=true` and browser shows `ERR_SSL_PROTOCOL_ERROR`:
+- Confirm protocol consistency:
+  - If your public URL is HTTPS on `3003`, `NEXTAUTH_URL` must be `https://nahwu.synology.me:3003`.
+  - If your public URL is HTTP on `3003`, `NEXTAUTH_URL` must be `http://nahwu.synology.me:3003`.
+- Keep `NEXTAUTH_URL_INTERNAL=http://127.0.0.1:3000`.
+- In HTTP mode, remove `AUTH_TRUST_HOST` (or set it to `false`) unless your proxy always sends `x-forwarded-proto=http`.
+- Redeploy after env changes, then verify:
+  - `docker compose exec web sh -lc 'env | grep -E \"NEXTAUTH_URL|NEXTAUTH_URL_INTERNAL|AUTH_TRUST_HOST\"'`
+
+No backend logs when testing from the internet:
+- Confirm DSM Reverse Proxy `Source` matches the public URL exactly:
+  - `https://nahwu.synology.me:3003` -> source protocol `HTTPS`, source port `3003`.
+- Confirm `NEXTAUTH_URL` in `.env.prod` exactly matches that public URL.
+- Confirm reverse proxy destination remains `http://127.0.0.1:3002`.

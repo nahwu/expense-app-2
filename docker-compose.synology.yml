@@ -4,7 +4,7 @@ services:
     container_name: expense-app-db
     restart: unless-stopped
     env_file:
-      - .env
+      - .env.prod
     volumes:
       - /volume1/docker/expense-app/db:/var/lib/postgresql
       - ./db/init:/docker-entrypoint-initdb.d:ro
@@ -15,7 +15,7 @@ services:
       retries: 10
       start_period: 10s
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:15432:5432"
     networks:
       - expense_app_net
 
@@ -30,12 +30,12 @@ services:
       db:
         condition: service_healthy
     env_file:
-      - .env
+      - .env.prod
     environment:
       NODE_ENV: production
       PORT: 3000
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3002:3000"
     healthcheck:
       test:
         [
