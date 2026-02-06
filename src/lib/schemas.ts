@@ -48,3 +48,11 @@ export const groupedReportQuerySchema = z.object({
   to: isoDateSchema.optional(),
   groupBy: z.enum(["month", "year"]).default("month"),
 });
+
+export const signUpSchema = z.object({
+  email: z.string().trim().email(),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters.")
+    .max(128, "Password must be at most 128 characters."),
+});

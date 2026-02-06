@@ -28,3 +28,5 @@ pnpm-debug.log*
 
 
 .npm-cache/
+
+.docker/postgres/18/docker/

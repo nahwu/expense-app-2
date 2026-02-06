@@ -29,7 +29,7 @@ describe("PATCH /api/expenses/:id", () => {
       body: JSON.stringify({ payee: "Cafe" }),
     });
 
-    const response = await PATCH(request, { params: { id: "exp-1" } });
+    const response = await PATCH(request, { params: Promise.resolve({ id: "exp-1" }) });
     expect(response.status).toBe(401);
   });
 
@@ -40,7 +40,7 @@ describe("PATCH /api/expenses/:id", () => {
       body: JSON.stringify({}),
     });
 
-    const response = await PATCH(request, { params: { id: "exp-1" } });
+    const response = await PATCH(request, { params: Promise.resolve({ id: "exp-1" }) });
     expect(response.status).toBe(400);
     expect(mocks.query).not.toHaveBeenCalled();
   });
@@ -56,7 +56,7 @@ describe("PATCH /api/expenses/:id", () => {
       body: JSON.stringify({ payee: "New Payee" }),
     });
 
-    const response = await PATCH(request, { params: { id: "exp-1" } });
+    const response = await PATCH(request, { params: Promise.resolve({ id: "exp-1" }) });
     const body = await response.json();
 
     expect(response.status).toBe(200);

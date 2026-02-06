@@ -29,7 +29,7 @@ describe("PATCH /api/categories/:id", () => {
       body: JSON.stringify({ name: "   " }),
     });
 
-    const response = await PATCH(request, { params: { id: "cat-1" } });
+    const response = await PATCH(request, { params: Promise.resolve({ id: "cat-1" }) });
     expect(response.status).toBe(400);
     expect(mocks.query).not.toHaveBeenCalled();
   });
@@ -51,7 +51,7 @@ describe("DELETE /api/categories/:id", () => {
       method: "DELETE",
     });
 
-    const response = await DELETE(request, { params: { id: "cat-1" } });
+    const response = await DELETE(request, { params: Promise.resolve({ id: "cat-1" }) });
     expect(response.status).toBe(409);
     expect(mocks.query).toHaveBeenCalledTimes(1);
   });

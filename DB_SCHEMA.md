@@ -3,7 +3,7 @@
 ## Notes
 
 - PostgreSQL 18.0.
-- Auth.js credentials mode with JWT sessions (no required auth DB tables).
+- Auth.js credentials mode with JWT sessions backed by `app_users`.
 - Domain tables use `user_id text` to map to session subject IDs.
 - Amounts are stored as integer cents to avoid floating-point errors.
 
@@ -11,6 +11,16 @@
 
 ```sql
 create extension if not exists pgcrypto;
+create extension if not exists citext;
+
+create table if not exists app_users (
+  id uuid primary key default gen_random_uuid(),
+  email citext not null unique,
+  password_hash text not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
 create table if not exists categories (
   id uuid primary key default gen_random_uuid(),

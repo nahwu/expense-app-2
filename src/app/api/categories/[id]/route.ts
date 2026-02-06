@@ -6,7 +6,7 @@ import { jsonError } from "@/lib/http";
 import { categoryUpdateSchema } from "@/lib/schemas";
 
 type RouteContext = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
@@ -15,7 +15,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return jsonError(401, "UNAUTHORIZED", "Authentication required.");
   }
 
-  const { id } = context.params;
+  const { id } = await context.params;
 
   try {
     const patch = categoryUpdateSchema.parse(await request.json());
@@ -58,7 +58,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return jsonError(401, "UNAUTHORIZED", "Authentication required.");
   }
 
-  const { id } = context.params;
+  const { id } = await context.params;
 
   const linkedExpenseCheck = await query<{ count: string }>(
     "select count(*) from expenses where user_id = $1 and category_id = $2",

@@ -6,7 +6,7 @@ import { jsonError } from "@/lib/http";
 import { netWorthSnapshotUpdateSchema } from "@/lib/schemas";
 
 type RouteContext = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
@@ -15,7 +15,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return jsonError(401, "UNAUTHORIZED", "Authentication required.");
   }
 
-  const { id } = context.params;
+  const { id } = await context.params;
 
   try {
     const patch = netWorthSnapshotUpdateSchema.parse(await request.json());
@@ -83,7 +83,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return jsonError(401, "UNAUTHORIZED", "Authentication required.");
   }
 
-  const { id } = context.params;
+  const { id } = await context.params;
   const result = await query("delete from networth_snapshots where user_id = $1 and id = $2", [userId, id]);
 
   if (result.rowCount === 0) {

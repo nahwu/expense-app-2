@@ -2,18 +2,52 @@ import { compare } from "bcryptjs";
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { z } from "zod";
+import { query } from "@/lib/db";
 
 const credentialsSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
+  email: z.string().trim().email(),
+  password: z.string().min(1),
 });
 
-function getBootstrapUser() {
+export async function authorizeCredentials(rawCredentials: unknown) {
+  const parsed = credentialsSchema.safeParse(rawCredentials);
+  if (!parsed.success) {
+    return null;
+  }
+
+  const credentials = parsed.data;
+  const result = await query<{
+    id: string;
+    email: string;
+    passwordHash: string;
+    isActive: boolean;
+  }>(
+    `
+      select
+        id::text as id,
+        email::text as email,
+        password_hash as "passwordHash",
+        is_active as "isActive"
+      from app_users
+      where lower(email::text) = lower($1)
+      limit 1
+    `,
+    [credentials.email],
+  );
+
+  const user = result.rows[0];
+  if (!user || !user.isActive) {
+    return null;
+  }
+
+  const passwordMatches = await compare(credentials.password, user.passwordHash);
+  if (!passwordMatches) {
+    return null;
+  }
+
   return {
-    id: process.env.BOOTSTRAP_USER_ID ?? "00000000-0000-0000-0000-000000000001",
-    email: process.env.BOOTSTRAP_USER_EMAIL ?? "",
-    password: process.env.BOOTSTRAP_USER_PASSWORD ?? "",
-    passwordHash: process.env.BOOTSTRAP_USER_PASSWORD_HASH ?? "",
+    id: user.id,
+    email: user.email,
   };
 }
 
@@ -28,33 +62,7 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(rawCredentials) {
-        const parsed = credentialsSchema.safeParse(rawCredentials);
-        if (!parsed.success) {
-          return null;
-        }
-
-        const credentials = parsed.data;
-        const bootstrap = getBootstrapUser();
-        if (!bootstrap.email || (!bootstrap.password && !bootstrap.passwordHash)) {
-          return null;
-        }
-
-        if (credentials.email.toLowerCase() !== bootstrap.email.toLowerCase()) {
-          return null;
-        }
-
-        const passwordMatches = bootstrap.passwordHash
-          ? await compare(credentials.password, bootstrap.passwordHash)
-          : credentials.password === bootstrap.password;
-
-        if (!passwordMatches) {
-          return null;
-        }
-
-        return {
-          id: bootstrap.id,
-          email: bootstrap.email,
-        };
+        return authorizeCredentials(rawCredentials);
       },
     }),
   ],

@@ -1,4 +1,14 @@
 create extension if not exists pgcrypto;
+create extension if not exists citext;
+
+create table if not exists app_users (
+  id uuid primary key default gen_random_uuid(),
+  email citext not null unique,
+  password_hash text not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
 create table if not exists categories (
   id uuid primary key default gen_random_uuid(),
@@ -64,4 +74,3 @@ values
   (null, 'Entertainment', true),
   (null, 'Other', true)
 on conflict do nothing;
-

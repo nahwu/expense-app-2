@@ -3,10 +3,19 @@
 ## General Rules
 
 - Base path: `/api`.
-- Authentication required for all endpoints except auth callbacks.
+- Authentication required for all endpoints except auth callbacks and signup.
 - User identity comes from server session.
 - Never accept `user_id` from client payload.
 - All write payloads validated with Zod.
+
+## Auth
+
+`POST /api/auth/signup`
+- Body:
+  - `email`
+  - `password`
+- Creates user account with hashed password.
+- Returns `409` if email already exists.
 
 ## Expenses
 

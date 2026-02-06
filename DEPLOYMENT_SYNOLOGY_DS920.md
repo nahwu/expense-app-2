@@ -33,7 +33,7 @@ services:
       POSTGRES_USER: expense_user
       POSTGRES_PASSWORD: change_me
     volumes:
-      - /volume1/docker/expense-app/db:/var/lib/postgresql/data
+      - /volume1/docker/expense-app/db:/var/lib/postgresql
       - ./db/init:/docker-entrypoint-initdb.d:ro
     networks:
       - expense_net
