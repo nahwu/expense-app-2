@@ -1,15 +1,3 @@
-# Database Schema
-
-## Notes
-
-- PostgreSQL 18.0.
-- Auth.js credentials mode with JWT sessions (no required auth DB tables).
-- Domain tables use `user_id text` to map to session subject IDs.
-- Amounts are stored as integer cents to avoid floating-point errors.
-
-## Core Tables
-
-```sql
 create extension if not exists pgcrypto;
 
 create table if not exists categories (
@@ -65,24 +53,15 @@ create table if not exists networth_snapshots (
 );
 
 create index if not exists ix_networth_user_date on networth_snapshots (user_id, snapshot_on desc);
-```
 
-## Optional Future Tables
+insert into categories (user_id, name, is_system)
+values
+  (null, 'Food', true),
+  (null, 'Transport', true),
+  (null, 'Housing', true),
+  (null, 'Utilities', true),
+  (null, 'Healthcare', true),
+  (null, 'Entertainment', true),
+  (null, 'Other', true)
+on conflict do nothing;
 
-- `import_jobs` for CSV import history and status.
-- `export_jobs` if exports become async.
-- `accounts` if you later track balances per account.
-
-## Query Patterns
-
-- Expense list: filter by `user_id`, date range, category, and payee.
-- Dashboard aggregates:
-  - monthly spend total
-  - yearly spend total
-  - spend by category
-  - net worth trend by snapshot date
-
-## Data Isolation Rule
-
-Every domain table has `user_id`.  
-All reads and writes must include authenticated user context and filter by that `user_id`.

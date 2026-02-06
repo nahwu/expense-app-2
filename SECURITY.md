@@ -9,6 +9,8 @@
 ## Authentication
 
 - Use Auth.js with secure server-side sessions.
+- Current scaffold uses Credentials provider with bootstrap admin env vars.
+- Move to database-backed users and optional MFA before production rollout.
 - Enforce strong password policy.
 - Use Argon2id for password hashing if credentials are stored locally.
 - Require email verification for new accounts.

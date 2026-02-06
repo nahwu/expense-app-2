@@ -30,7 +30,7 @@ Backend:
 - Authorization enforced on every query by `user_id`.
 
 Database:
-- PostgreSQL current stable major on DS920+ (Container Manager).
+- PostgreSQL 18.0 on DS920+ (Container Manager).
 - Single database with per-table `user_id` ownership.
 - Optional PostgreSQL Row Level Security as a defense-in-depth layer.
 
@@ -43,12 +43,12 @@ Database:
 
 ## Library Policy (Latest Stable)
 
-Use latest stable package versions at bootstrap time:
+Use pinned package versions:
 
 ```bash
-npm install next@latest react@latest react-dom@latest
-npm install next-auth@latest zod@latest recharts@latest
-npm install tailwindcss@latest
+npm install next@16.1.6 react@19.2.0 react-dom@19.2.0
+npm install next-auth@4.24.13 zod@4.1.12 recharts@3.1.2
+npm install tailwindcss@4.1.13
 ```
 
 Then:

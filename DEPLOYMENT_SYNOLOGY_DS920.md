@@ -22,12 +22,10 @@ Run the full app on DS920+ with:
 
 ## Example Compose
 
-Replace `<current-stable-major>` with the actual PostgreSQL major you choose.
-
 ```yaml
 services:
   db:
-    image: postgres:<current-stable-major>
+    image: postgres:18.0
     container_name: expense-db
     restart: unless-stopped
     environment:
@@ -36,11 +34,12 @@ services:
       POSTGRES_PASSWORD: change_me
     volumes:
       - /volume1/docker/expense-app/db:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
     networks:
       - expense_net
 
   web:
-    image: node:lts-alpine
+    image: node:24-alpine
     container_name: expense-web
     restart: unless-stopped
     working_dir: /app
