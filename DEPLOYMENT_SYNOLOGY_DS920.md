@@ -52,7 +52,6 @@ DATABASE_URL=postgresql://expense_user:replace_with_strong_password@db:5432/expe
 
 NEXTAUTH_URL=https://nahwu.synology.me:3003
 NEXTAUTH_URL_INTERNAL=http://127.0.0.1:3000
-AUTH_TRUST_HOST=true
 NEXTAUTH_SECRET=replace_with_long_random_secret
 ```
 
@@ -60,7 +59,7 @@ Notes:
 - `NEXTAUTH_URL` must exactly match the public HTTPS URL.
   If you use a non-default HTTPS port, include it (for example `:3003`).
 - `NEXTAUTH_URL_INTERNAL` should stay `http://127.0.0.1:3000` for in-container server-side auth calls.
-- `AUTH_TRUST_HOST=true` allows Auth.js to trust reverse-proxy forwarded host/protocol headers.
+- Keep `AUTH_TRUST_HOST` unset unless you have verified DSM forwards `x-forwarded-host` and `x-forwarded-proto` correctly.
 - Use a long random `NEXTAUTH_SECRET`.
 - Keep `.env.prod` out of git.
 - `DATABASE_URL` must use host `db` (not `localhost`) because the app runs in a container.
@@ -98,7 +97,13 @@ Enable WebSocket support.
 Certificate:
 - Assign your certificate to `nahwu.synology.me`.
 
-## Step 6: First-time app setup
+## Step 6: Configure router NAT forwarding
+
+External Port: `3003`
+Internal Port: `3003`
+Internal IP: `NAS IP address`
+
+## Step 7: First-time app setup
 
 - Open `https://nahwu.synology.me:3003/signup`
 - Create first account.

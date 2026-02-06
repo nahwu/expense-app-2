@@ -9,9 +9,12 @@ export async function middleware(request: NextRequest) {
   });
 
   if (!token) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
-    return NextResponse.redirect(loginUrl);
+    const callbackUrl = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+    const loginLocation = `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`;
+    return new NextResponse(null, {
+      status: 307,
+      headers: { Location: loginLocation },
+    });
   }
 
   return NextResponse.next();
@@ -20,4 +23,3 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: ["/dashboard/:path*"],
 };
-

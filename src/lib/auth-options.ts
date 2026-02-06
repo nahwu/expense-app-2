@@ -67,6 +67,23 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) {
+        return url;
+      }
+
+      try {
+        const targetUrl = new URL(url);
+        const resolvedBase = new URL(process.env.NEXTAUTH_URL ?? baseUrl);
+        if (targetUrl.origin === resolvedBase.origin) {
+          return `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`;
+        }
+      } catch {
+        return "/";
+      }
+
+      return "/";
+    },
     async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
