@@ -35,6 +35,7 @@ Self-hosted personal finance app for tracking expenses, optional income, and opt
 3. Install dependencies: `npm install`.
 4. Run dev server on host: `npm run dev`.
 5. For DS920+ deployment, use `DEPLOYMENT_SYNOLOGY_DS920.md`.
+   - DSM Project UI deployment uses `docker-compose.synology.yml`.
 
 ## Run Locally (Development)
 
