@@ -33,9 +33,12 @@ Status legend: `[x]` completed, `[ ]` not completed.
 
 ## Phase 4: Import/Export
 
-- [ ] CSV export for expenses, incomes, and net worth snapshots.
+- [x] CSV export for expenses, incomes, and net worth snapshots.
 - [ ] CSV import with validation report and partial-failure handling.
+- [ ] On desktop/mobile, allow user to copy & paste text for import. Input format to be defined.
 - [ ] Duplicate-detection strategy for import.
+- [ ] UI to display results of import. Allow user to manually fix simple issues. And to re-categories fields under "Others"
+- [x] CSV import API scaffold endpoint (`/api/import/csv`) added (returns `501` until implemented).
 
 ## Phase 5: Hardening and Ops
 
@@ -44,10 +47,21 @@ Status legend: `[x]` completed, `[ ]` not completed.
 - [ ] Add scheduled backups + tested restore process.
 - [ ] Add CI checks (lint, typecheck, tests).
 
+## Implemented Enhancements (Beyond Original Phase Scope)
+
+- [x] Visual dashboard redesign with stronger hierarchy and improved chart/card presentation.
+- [x] Collapsible desktop sidebar navigation.
+- [x] Mobile slide-out menu and bottom action bar for navigation.
+- [x] Quick-add expense floating action button for daily entry flow.
+- [x] Landing page redesign with status panel and action-oriented CTAs.
+- [x] Optional `payee` on expense create/update.
+- [x] Optional `source` on income create/update.
+- [x] Health check endpoint (`GET /api/health`) for uptime probes.
+
 ## Definition of Done (MVP)
 
 - [x] User can sign up, sign in, and sign out securely.
 - [x] User can create, edit, delete, and list own expenses.
-- [ ] User can view monthly/yearly spending charts.
-- [ ] Data is persisted on DS920+ PostgreSQL.
-- [ ] App is reachable over HTTPS and is mobile responsive.
+- [x] User can view monthly/yearly spending charts.
+- [x] Data is persisted on DS920+ PostgreSQL.
+- [x] App is reachable over HTTPS and is mobile responsive.
