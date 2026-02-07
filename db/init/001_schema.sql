@@ -70,7 +70,12 @@ values
   (null, 'Transport', true),
   (null, 'Housing', true),
   (null, 'Utilities', true),
+  (null, 'Household', true),
   (null, 'Healthcare', true),
-  (null, 'Entertainment', true),
+  (null, 'Bills', true),
+  (null, 'Tax', true),
+  (null, 'Insurance', true),
+  (null, 'Leisure', true),
+  (null, 'Gift', true),
   (null, 'Other', true)
 on conflict do nothing;
