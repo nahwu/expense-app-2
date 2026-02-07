@@ -20,16 +20,16 @@ Status legend: `[x]` completed, `[ ]` not completed.
 
 ## Phase 2: Optional Income + Net Worth
 
-- [ ] Income CRUD.
-- [ ] Net worth snapshot CRUD.
-- [ ] Cashflow chart (income vs expenses).
-- [ ] Net worth trend chart (monthly/yearly).
+- [x] Income CRUD.
+- [x] Net worth snapshot CRUD.
+- [x] Cashflow chart (income vs expenses).
+- [x] Net worth trend chart (monthly/yearly).
 
 ## Phase 3: Reporting
 
-- [ ] Spending by category chart.
-- [ ] Year-over-year spend comparison.
-- [ ] Data tables with export buttons.
+- [x] Spending by category chart.
+- [x] Year-over-year spend comparison.
+- [x] Data tables with export buttons.
 
 ## Phase 4: Import/Export
 

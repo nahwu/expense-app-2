@@ -25,8 +25,8 @@ export default async function HomePage() {
         <p className="text-sm font-semibold uppercase tracking-wide text-slate-600">Expense App 2</p>
         <h1 className="mt-2 text-3xl font-semibold text-slate-900">Self-hosted Finance Dashboard</h1>
         <p className="mt-3 max-w-3xl text-slate-700">
-          Initial scaffold complete. Next steps are database migrations, auth hardening, and UI implementation for
-          CRUD forms and reporting charts.
+          Dashboard now supports expenses, incomes, and net worth snapshots with reporting charts and CSV export.
+          Next steps are import workflows and operational hardening.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <a

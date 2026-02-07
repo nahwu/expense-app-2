@@ -2,6 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { signOut } from "next-auth/react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 type Category = {
   id: string;
@@ -19,11 +34,55 @@ type Expense = {
   note: string | null;
 };
 
+type Income = {
+  id: string;
+  amountCents: number;
+  earnedOn: string;
+  source: string;
+  note: string | null;
+};
+
+type NetWorthSnapshot = {
+  id: string;
+  snapshotOn: string;
+  totalAssetsCents: number;
+  totalLiabilitiesCents: number;
+  netWorthCents: number;
+  note: string | null;
+};
+
 type SpendingSummary = {
   period: string;
   totalSpendingCents: number;
   totalIncomeCents: number;
   netCashflowCents: number;
+};
+
+type CashflowPoint = {
+  period: string;
+  totalIncomeCents: number;
+  totalExpenseCents: number;
+  netCashflowCents: number;
+};
+
+type NetWorthTrendPoint = {
+  period: string;
+  totalAssetsCents: number;
+  totalLiabilitiesCents: number;
+  netWorthCents: number;
+  snapshotOn: string;
+};
+
+type SpendingByCategoryPoint = {
+  category: string | null;
+  totalCents: number;
+};
+
+type YearOverYearSpend = {
+  year: string;
+  totalExpenseCents: number;
+  changeAmountCents: number | null;
+  changePercent: number | null;
 };
 
 type DashboardClientProps = {
@@ -39,6 +98,22 @@ type ExpenseForm = {
   note: string;
 };
 
+type IncomeForm = {
+  id: string | null;
+  amount: string;
+  earnedOn: string;
+  source: string;
+  note: string;
+};
+
+type NetWorthSnapshotForm = {
+  id: string | null;
+  snapshotOn: string;
+  totalAssets: string;
+  totalLiabilities: string;
+  note: string;
+};
+
 type Filters = {
   from: string;
   to: string;
@@ -46,14 +121,74 @@ type Filters = {
   payee: string;
 };
 
-const todayIso = new Date().toISOString().slice(0, 10);
+type IncomeFilters = {
+  from: string;
+  to: string;
+  source: string;
+};
 
-function dollarsToCents(value: string) {
+type SnapshotFilters = {
+  from: string;
+  to: string;
+};
+
+type ReportFilters = {
+  from: string;
+  to: string;
+  groupBy: "month" | "year";
+};
+
+type ExportEntity = "expenses" | "incomes" | "networth_snapshots";
+
+type ExpenseApi = Omit<Expense, "amountCents"> & { amountCents: number | string };
+type IncomeApi = Omit<Income, "amountCents"> & { amountCents: number | string };
+type NetWorthSnapshotApi = Omit<
+  NetWorthSnapshot,
+  "totalAssetsCents" | "totalLiabilitiesCents" | "netWorthCents"
+> & {
+  totalAssetsCents: number | string;
+  totalLiabilitiesCents: number | string;
+  netWorthCents: number | string;
+};
+type SpendingSummaryApi = Omit<
+  SpendingSummary,
+  "totalSpendingCents" | "totalIncomeCents" | "netCashflowCents"
+> & {
+  totalSpendingCents: number | string;
+  totalIncomeCents: number | string;
+  netCashflowCents: number | string;
+};
+type CashflowPointApi = Omit<CashflowPoint, "totalIncomeCents" | "totalExpenseCents" | "netCashflowCents"> & {
+  totalIncomeCents: number | string;
+  totalExpenseCents: number | string;
+  netCashflowCents: number | string;
+};
+type NetWorthTrendPointApi = Omit<
+  NetWorthTrendPoint,
+  "totalAssetsCents" | "totalLiabilitiesCents" | "netWorthCents"
+> & {
+  totalAssetsCents: number | string;
+  totalLiabilitiesCents: number | string;
+  netWorthCents: number | string;
+};
+type SpendingByCategoryPointApi = Omit<SpendingByCategoryPoint, "totalCents"> & { totalCents: number | string };
+
+const todayIso = new Date().toISOString().slice(0, 10);
+const chartColors = ["#0f766e", "#0ea5e9", "#7c3aed", "#f97316", "#e11d48", "#0891b2", "#65a30d"];
+
+function dollarsToCents(value: string, allowZero = false) {
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  if (allowZero ? parsed < 0 : parsed <= 0) {
     return null;
   }
   return Math.round(parsed * 100);
+}
+
+function centsToDollars(cents: number) {
+  return (cents / 100).toFixed(2);
 }
 
 function formatCurrency(cents: number) {
@@ -61,6 +196,50 @@ function formatCurrency(cents: number) {
     style: "currency",
     currency: "USD",
   }).format(cents / 100);
+}
+
+function formatCurrencyCompact(cents: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(cents / 100);
+}
+
+function formatPercent(value: number | null) {
+  if (value === null || !Number.isFinite(value)) {
+    return "--";
+  }
+
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${value.toFixed(1)}%`;
+}
+
+function buildYearOverYearSpend(rows: CashflowPoint[]) {
+  const sorted = [...rows].sort((a, b) => a.period.localeCompare(b.period));
+
+  return sorted.map<YearOverYearSpend>((row, index) => {
+    const previous = index > 0 ? sorted[index - 1] : null;
+    if (!previous) {
+      return {
+        year: row.period,
+        totalExpenseCents: row.totalExpenseCents,
+        changeAmountCents: null,
+        changePercent: null,
+      };
+    }
+
+    const delta = row.totalExpenseCents - previous.totalExpenseCents;
+    const changePercent = previous.totalExpenseCents === 0 ? null : (delta / previous.totalExpenseCents) * 100;
+
+    return {
+      year: row.period,
+      totalExpenseCents: row.totalExpenseCents,
+      changeAmountCents: delta,
+      changePercent,
+    };
+  });
 }
 
 async function requestJson<T>(url: string, init?: RequestInit) {
@@ -83,12 +262,28 @@ async function requestJson<T>(url: string, init?: RequestInit) {
   return body as T;
 }
 
-const emptyForm: ExpenseForm = {
+const emptyExpenseForm: ExpenseForm = {
   id: null,
   amount: "",
   categoryId: "",
   spentOn: todayIso,
   payee: "",
+  note: "",
+};
+
+const emptyIncomeForm: IncomeForm = {
+  id: null,
+  amount: "",
+  earnedOn: todayIso,
+  source: "",
+  note: "",
+};
+
+const emptySnapshotForm: NetWorthSnapshotForm = {
+  id: null,
+  snapshotOn: todayIso,
+  totalAssets: "",
+  totalLiabilities: "",
   note: "",
 };
 
@@ -99,94 +294,305 @@ const emptyFilters: Filters = {
   payee: "",
 };
 
+const emptyIncomeFilters: IncomeFilters = {
+  from: "",
+  to: "",
+  source: "",
+};
+
+const emptySnapshotFilters: SnapshotFilters = {
+  from: "",
+  to: "",
+};
+
+const defaultReportFilters: ReportFilters = {
+  from: "",
+  to: "",
+  groupBy: "month",
+};
+
 export default function DashboardClient({ userEmail }: DashboardClientProps) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [incomes, setIncomes] = useState<Income[]>([]);
+  const [snapshots, setSnapshots] = useState<NetWorthSnapshot[]>([]);
+  const [cashflowSeries, setCashflowSeries] = useState<CashflowPoint[]>([]);
+  const [netWorthSeries, setNetWorthSeries] = useState<NetWorthTrendPoint[]>([]);
+  const [spendingByCategory, setSpendingByCategory] = useState<SpendingByCategoryPoint[]>([]);
+  const [yearOverYearSpend, setYearOverYearSpend] = useState<YearOverYearSpend[]>([]);
   const [monthSummary, setMonthSummary] = useState<SpendingSummary | null>(null);
   const [yearSummary, setYearSummary] = useState<SpendingSummary | null>(null);
-  const [expenseForm, setExpenseForm] = useState<ExpenseForm>(emptyForm);
+
+  const [expenseForm, setExpenseForm] = useState<ExpenseForm>(emptyExpenseForm);
+  const [incomeForm, setIncomeForm] = useState<IncomeForm>(emptyIncomeForm);
+  const [snapshotForm, setSnapshotForm] = useState<NetWorthSnapshotForm>(emptySnapshotForm);
+
   const [filters, setFilters] = useState<Filters>(emptyFilters);
+  const [incomeFilters, setIncomeFilters] = useState<IncomeFilters>(emptyIncomeFilters);
+  const [snapshotFilters, setSnapshotFilters] = useState<SnapshotFilters>(emptySnapshotFilters);
+  const [reportFilters, setReportFilters] = useState<ReportFilters>(defaultReportFilters);
+
   const [newCategoryName, setNewCategoryName] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
-  const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [isLoadingExpenses, setIsLoadingExpenses] = useState(true);
+  const [isLoadingIncomes, setIsLoadingIncomes] = useState(true);
+  const [isLoadingSnapshots, setIsLoadingSnapshots] = useState(true);
+  const [isLoadingSummaries, setIsLoadingSummaries] = useState(true);
+  const [isLoadingReports, setIsLoadingReports] = useState(true);
+
+  const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
+  const [isSubmittingIncome, setIsSubmittingIncome] = useState(false);
+  const [isSubmittingSnapshot, setIsSubmittingSnapshot] = useState(false);
+  const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
+
+  const isLoadingAny =
+    isLoadingCategories ||
+    isLoadingExpenses ||
+    isLoadingIncomes ||
+    isLoadingSnapshots ||
+    isLoadingSummaries ||
+    isLoadingReports;
 
   const customCategories = useMemo(() => categories.filter((category) => !category.isSystem), [categories]);
 
-  const loadCategories = useCallback(async () => {
-    const result = await requestJson<{ data: Category[] }>("/api/categories");
-    setCategories(result.data);
-    setExpenseForm((current) => {
-      if (current.categoryId) {
-        return current;
-      }
-      return {
-        ...current,
-        categoryId: result.data[0]?.id ?? "",
-      };
-    });
+  const setRequestError = useCallback((loadError: unknown, fallback: string) => {
+    const message = loadError instanceof Error ? loadError.message : fallback;
+    setError(message);
   }, []);
 
-  const loadExpenses = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (filters.from) {
-      params.set("from", filters.from);
-    }
-    if (filters.to) {
-      params.set("to", filters.to);
-    }
-    if (filters.categoryId) {
-      params.set("categoryId", filters.categoryId);
-    }
-    if (filters.payee) {
-      params.set("payee", filters.payee);
-    }
-    params.set("page", "1");
-    params.set("pageSize", "50");
+  const loadCategories = useCallback(async () => {
+    setIsLoadingCategories(true);
+    try {
+      const result = await requestJson<{ data: Category[] }>("/api/categories");
+      const nextCategories = result.data;
+      setCategories(nextCategories);
+      setExpenseForm((current) => {
+        if (current.categoryId && nextCategories.some((category) => category.id === current.categoryId)) {
+          return current;
+        }
 
-    const result = await requestJson<{ data: Expense[] }>(`/api/expenses?${params.toString()}`);
-    setExpenses(result.data);
-  }, [filters]);
+        return { ...current, categoryId: nextCategories[0]?.id ?? "" };
+      });
+    } finally {
+      setIsLoadingCategories(false);
+    }
+  }, []);
+
+  const loadExpenses = useCallback(async (activeFilters: Filters) => {
+    setIsLoadingExpenses(true);
+    try {
+      const params = new URLSearchParams();
+      if (activeFilters.from) {
+        params.set("from", activeFilters.from);
+      }
+      if (activeFilters.to) {
+        params.set("to", activeFilters.to);
+      }
+      if (activeFilters.categoryId) {
+        params.set("categoryId", activeFilters.categoryId);
+      }
+      if (activeFilters.payee) {
+        params.set("payee", activeFilters.payee);
+      }
+      params.set("page", "1");
+      params.set("pageSize", "50");
+
+      const result = await requestJson<{ data: ExpenseApi[] }>(`/api/expenses?${params.toString()}`);
+      setExpenses(
+        result.data.map((expense) => ({
+          ...expense,
+          amountCents: Number(expense.amountCents),
+        })),
+      );
+    } finally {
+      setIsLoadingExpenses(false);
+    }
+  }, []);
+
+  const loadIncomes = useCallback(async (activeFilters: IncomeFilters) => {
+    setIsLoadingIncomes(true);
+    try {
+      const params = new URLSearchParams();
+      if (activeFilters.from) {
+        params.set("from", activeFilters.from);
+      }
+      if (activeFilters.to) {
+        params.set("to", activeFilters.to);
+      }
+      if (activeFilters.source) {
+        params.set("source", activeFilters.source);
+      }
+      params.set("page", "1");
+      params.set("pageSize", "50");
+
+      const result = await requestJson<{ data: IncomeApi[] }>(`/api/incomes?${params.toString()}`);
+      setIncomes(
+        result.data.map((income) => ({
+          ...income,
+          amountCents: Number(income.amountCents),
+        })),
+      );
+    } finally {
+      setIsLoadingIncomes(false);
+    }
+  }, []);
+
+  const loadSnapshots = useCallback(async (activeFilters: SnapshotFilters) => {
+    setIsLoadingSnapshots(true);
+    try {
+      const params = new URLSearchParams();
+      if (activeFilters.from) {
+        params.set("from", activeFilters.from);
+      }
+      if (activeFilters.to) {
+        params.set("to", activeFilters.to);
+      }
+      params.set("page", "1");
+      params.set("pageSize", "50");
+
+      const result = await requestJson<{ data: NetWorthSnapshotApi[] }>(`/api/networth-snapshots?${params.toString()}`);
+      setSnapshots(
+        result.data.map((snapshot) => ({
+          ...snapshot,
+          totalAssetsCents: Number(snapshot.totalAssetsCents),
+          totalLiabilitiesCents: Number(snapshot.totalLiabilitiesCents),
+          netWorthCents: Number(snapshot.netWorthCents),
+        })),
+      );
+    } finally {
+      setIsLoadingSnapshots(false);
+    }
+  }, []);
 
   const loadSummaries = useCallback(async () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
+    setIsLoadingSummaries(true);
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
 
-    const [monthResult, yearResult] = await Promise.all([
-      requestJson<{ data: SpendingSummary }>(`/api/reports/spending-summary?year=${year}&month=${month}`),
-      requestJson<{ data: SpendingSummary }>(`/api/reports/spending-summary?year=${year}`),
-    ]);
+      const [monthResult, yearResult] = await Promise.all([
+        requestJson<{ data: SpendingSummaryApi }>(`/api/reports/spending-summary?year=${year}&month=${month}`),
+        requestJson<{ data: SpendingSummaryApi }>(`/api/reports/spending-summary?year=${year}`),
+      ]);
 
-    setMonthSummary(monthResult.data);
-    setYearSummary(yearResult.data);
+      setMonthSummary({
+        ...monthResult.data,
+        totalSpendingCents: Number(monthResult.data.totalSpendingCents),
+        totalIncomeCents: Number(monthResult.data.totalIncomeCents),
+        netCashflowCents: Number(monthResult.data.netCashflowCents),
+      });
+
+      setYearSummary({
+        ...yearResult.data,
+        totalSpendingCents: Number(yearResult.data.totalSpendingCents),
+        totalIncomeCents: Number(yearResult.data.totalIncomeCents),
+        netCashflowCents: Number(yearResult.data.netCashflowCents),
+      });
+    } finally {
+      setIsLoadingSummaries(false);
+    }
   }, []);
 
-  const loadAll = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
+  const loadReports = useCallback(async (activeFilters: ReportFilters) => {
+    setIsLoadingReports(true);
     try {
-      await Promise.all([loadCategories(), loadExpenses(), loadSummaries()]);
-    } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : "Failed to load dashboard data.";
-      setError(message);
+      const dateParams = new URLSearchParams();
+      if (activeFilters.from) {
+        dateParams.set("from", activeFilters.from);
+      }
+      if (activeFilters.to) {
+        dateParams.set("to", activeFilters.to);
+      }
+
+      const cashflowParams = new URLSearchParams(dateParams);
+      cashflowParams.set("groupBy", activeFilters.groupBy);
+
+      const networthParams = new URLSearchParams(dateParams);
+      networthParams.set("groupBy", activeFilters.groupBy);
+
+      const yearlyCashflowParams = new URLSearchParams(dateParams);
+      yearlyCashflowParams.set("groupBy", "year");
+
+      const [cashflowResult, netWorthResult, byCategoryResult, yearlyCashflowResult] = await Promise.all([
+        requestJson<{ data: CashflowPointApi[] }>(`/api/reports/cashflow?${cashflowParams.toString()}`),
+        requestJson<{ data: NetWorthTrendPointApi[] }>(`/api/reports/networth-trend?${networthParams.toString()}`),
+        requestJson<{ data: SpendingByCategoryPointApi[] }>(`/api/reports/spending-by-category?${dateParams.toString()}`),
+        requestJson<{ data: CashflowPointApi[] }>(`/api/reports/cashflow?${yearlyCashflowParams.toString()}`),
+      ]);
+
+      const normalizedCashflow = cashflowResult.data.map((point) => ({
+        ...point,
+        totalIncomeCents: Number(point.totalIncomeCents),
+        totalExpenseCents: Number(point.totalExpenseCents),
+        netCashflowCents: Number(point.netCashflowCents),
+      }));
+
+      const normalizedYearlyCashflow = yearlyCashflowResult.data.map((point) => ({
+        ...point,
+        totalIncomeCents: Number(point.totalIncomeCents),
+        totalExpenseCents: Number(point.totalExpenseCents),
+        netCashflowCents: Number(point.netCashflowCents),
+      }));
+
+      setCashflowSeries(normalizedCashflow);
+      setNetWorthSeries(
+        netWorthResult.data.map((point) => ({
+          ...point,
+          totalAssetsCents: Number(point.totalAssetsCents),
+          totalLiabilitiesCents: Number(point.totalLiabilitiesCents),
+          netWorthCents: Number(point.netWorthCents),
+        })),
+      );
+      setSpendingByCategory(
+        byCategoryResult.data.map((point) => ({
+          ...point,
+          totalCents: Number(point.totalCents),
+        })),
+      );
+      setYearOverYearSpend(buildYearOverYearSpend(normalizedYearlyCashflow));
     } finally {
-      setIsLoading(false);
+      setIsLoadingReports(false);
     }
-  }, [loadCategories, loadExpenses, loadSummaries]);
+  }, []);
 
   useEffect(() => {
-    void loadAll();
-  }, [loadAll]);
-
-  useEffect(() => {
-    void loadExpenses().catch((loadError) => {
-      const message = loadError instanceof Error ? loadError.message : "Failed to load expense list.";
-      setError(message);
+    void loadCategories().catch((loadError) => {
+      setRequestError(loadError, "Failed to load categories.");
     });
-  }, [filters, loadExpenses]);
+  }, [loadCategories, setRequestError]);
+
+  useEffect(() => {
+    void loadExpenses(filters).catch((loadError) => {
+      setRequestError(loadError, "Failed to load expenses.");
+    });
+  }, [filters, loadExpenses, setRequestError]);
+
+  useEffect(() => {
+    void loadIncomes(incomeFilters).catch((loadError) => {
+      setRequestError(loadError, "Failed to load incomes.");
+    });
+  }, [incomeFilters, loadIncomes, setRequestError]);
+
+  useEffect(() => {
+    void loadSnapshots(snapshotFilters).catch((loadError) => {
+      setRequestError(loadError, "Failed to load net worth snapshots.");
+    });
+  }, [snapshotFilters, loadSnapshots, setRequestError]);
+
+  useEffect(() => {
+    void loadSummaries().catch((loadError) => {
+      setRequestError(loadError, "Failed to load summary cards.");
+    });
+  }, [loadSummaries, setRequestError]);
+
+  useEffect(() => {
+    void loadReports(reportFilters).catch((loadError) => {
+      setRequestError(loadError, "Failed to load reports.");
+    });
+  }, [loadReports, reportFilters, setRequestError]);
 
   async function handleExpenseSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -233,10 +639,11 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
       }
 
       setExpenseForm((current) => ({
-        ...emptyForm,
+        ...emptyExpenseForm,
         categoryId: current.categoryId || categories[0]?.id || "",
       }));
-      await Promise.all([loadExpenses(), loadSummaries()]);
+
+      await Promise.all([loadExpenses(filters), loadSummaries(), loadReports(reportFilters)]);
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Failed to save expense.";
       setError(message);
@@ -248,7 +655,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
   function beginEdit(expense: Expense) {
     setExpenseForm({
       id: expense.id,
-      amount: (expense.amountCents / 100).toFixed(2),
+      amount: centsToDollars(expense.amountCents),
       categoryId: expense.categoryId,
       spentOn: expense.spentOn,
       payee: expense.payee,
@@ -258,7 +665,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
 
   function cancelEdit() {
     setExpenseForm((current) => ({
-      ...emptyForm,
+      ...emptyExpenseForm,
       categoryId: current.categoryId || categories[0]?.id || "",
     }));
   }
@@ -272,7 +679,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
     setError(null);
     try {
       await requestJson(`/api/expenses/${expenseId}`, { method: "DELETE" });
-      await Promise.all([loadExpenses(), loadSummaries()]);
+      await Promise.all([loadExpenses(filters), loadSummaries(), loadReports(reportFilters)]);
       if (expenseForm.id === expenseId) {
         cancelEdit();
       }
@@ -329,6 +736,186 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
     }
   }
 
+  async function handleIncomeSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+
+    const amountCents = dollarsToCents(incomeForm.amount);
+    if (!amountCents) {
+      setError("Income amount must be greater than 0.");
+      return;
+    }
+    if (!incomeForm.earnedOn) {
+      setError("Income date is required.");
+      return;
+    }
+    if (!incomeForm.source.trim()) {
+      setError("Income source is required.");
+      return;
+    }
+
+    setIsSubmittingIncome(true);
+    try {
+      const payload = {
+        amountCents,
+        earnedOn: incomeForm.earnedOn,
+        source: incomeForm.source.trim(),
+        note: incomeForm.note.trim() || undefined,
+      };
+
+      if (incomeForm.id) {
+        await requestJson(`/api/incomes/${incomeForm.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await requestJson("/api/incomes", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+
+      setIncomeForm(emptyIncomeForm);
+      await Promise.all([loadIncomes(incomeFilters), loadSummaries(), loadReports(reportFilters)]);
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "Failed to save income.";
+      setError(message);
+    } finally {
+      setIsSubmittingIncome(false);
+    }
+  }
+
+  function beginIncomeEdit(income: Income) {
+    setIncomeForm({
+      id: income.id,
+      amount: centsToDollars(income.amountCents),
+      earnedOn: income.earnedOn,
+      source: income.source,
+      note: income.note ?? "",
+    });
+  }
+
+  function cancelIncomeEdit() {
+    setIncomeForm(emptyIncomeForm);
+  }
+
+  async function deleteIncome(incomeId: string) {
+    const confirmed = window.confirm("Delete this income record?");
+    if (!confirmed) {
+      return;
+    }
+
+    setError(null);
+    try {
+      await requestJson(`/api/incomes/${incomeId}`, { method: "DELETE" });
+      await Promise.all([loadIncomes(incomeFilters), loadSummaries(), loadReports(reportFilters)]);
+      if (incomeForm.id === incomeId) {
+        cancelIncomeEdit();
+      }
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : "Failed to delete income.";
+      setError(message);
+    }
+  }
+
+  async function handleSnapshotSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+
+    const totalAssetsCents = dollarsToCents(snapshotForm.totalAssets, true);
+    const totalLiabilitiesCents = dollarsToCents(snapshotForm.totalLiabilities, true);
+
+    if (totalAssetsCents === null || totalLiabilitiesCents === null) {
+      setError("Assets and liabilities must be valid amounts (0 or greater).");
+      return;
+    }
+    if (!snapshotForm.snapshotOn) {
+      setError("Snapshot date is required.");
+      return;
+    }
+
+    setIsSubmittingSnapshot(true);
+    try {
+      const payload = {
+        snapshotOn: snapshotForm.snapshotOn,
+        totalAssetsCents,
+        totalLiabilitiesCents,
+        note: snapshotForm.note.trim() || undefined,
+      };
+
+      if (snapshotForm.id) {
+        await requestJson(`/api/networth-snapshots/${snapshotForm.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await requestJson("/api/networth-snapshots", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+
+      setSnapshotForm(emptySnapshotForm);
+      await Promise.all([loadSnapshots(snapshotFilters), loadReports(reportFilters)]);
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "Failed to save net worth snapshot.";
+      setError(message);
+    } finally {
+      setIsSubmittingSnapshot(false);
+    }
+  }
+
+  function beginSnapshotEdit(snapshot: NetWorthSnapshot) {
+    setSnapshotForm({
+      id: snapshot.id,
+      snapshotOn: snapshot.snapshotOn,
+      totalAssets: centsToDollars(snapshot.totalAssetsCents),
+      totalLiabilities: centsToDollars(snapshot.totalLiabilitiesCents),
+      note: snapshot.note ?? "",
+    });
+  }
+
+  function cancelSnapshotEdit() {
+    setSnapshotForm(emptySnapshotForm);
+  }
+
+  async function deleteSnapshot(snapshotId: string) {
+    const confirmed = window.confirm("Delete this net worth snapshot?");
+    if (!confirmed) {
+      return;
+    }
+
+    setError(null);
+    try {
+      await requestJson(`/api/networth-snapshots/${snapshotId}`, { method: "DELETE" });
+      await Promise.all([loadSnapshots(snapshotFilters), loadReports(reportFilters)]);
+      if (snapshotForm.id === snapshotId) {
+        cancelSnapshotEdit();
+      }
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : "Failed to delete net worth snapshot.";
+      setError(message);
+    }
+  }
+
+  function exportCsv(entity: ExportEntity, from: string, to: string) {
+    const params = new URLSearchParams({ entity });
+    if (from) {
+      params.set("from", from);
+    }
+    if (to) {
+      params.set("to", to);
+    }
+
+    const anchor = document.createElement("a");
+    anchor.href = `/api/export/csv?${params.toString()}`;
+    anchor.rel = "noopener";
+    anchor.style.display = "none";
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-6 sm:px-8">
       <header className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm">
@@ -354,6 +941,9 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
             {monthSummary ? formatCurrency(monthSummary.totalSpendingCents) : "--"}
           </p>
           <p className="mt-1 text-sm text-slate-600">
+            Income: {monthSummary ? formatCurrency(monthSummary.totalIncomeCents) : "--"}
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
             Net cashflow: {monthSummary ? formatCurrency(monthSummary.netCashflowCents) : "--"}
           </p>
         </article>
@@ -363,16 +953,223 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
             {yearSummary ? formatCurrency(yearSummary.totalSpendingCents) : "--"}
           </p>
           <p className="mt-1 text-sm text-slate-600">
+            Income: {yearSummary ? formatCurrency(yearSummary.totalIncomeCents) : "--"}
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
             Net cashflow: {yearSummary ? formatCurrency(yearSummary.netCashflowCents) : "--"}
           </p>
         </article>
       </section>
 
+      <section className="mt-4 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-slate-900">Reporting</h2>
+          <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-4">
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) => setReportFilters((current) => ({ ...current, from: event.target.value }))}
+              placeholder="From"
+              type="date"
+              value={reportFilters.from}
+            />
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) => setReportFilters((current) => ({ ...current, to: event.target.value }))}
+              placeholder="To"
+              type="date"
+              value={reportFilters.to}
+            />
+            <select
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) =>
+                setReportFilters((current) => ({
+                  ...current,
+                  groupBy: event.target.value as ReportFilters["groupBy"],
+                }))
+              }
+              value={reportFilters.groupBy}
+            >
+              <option value="month">Group by Month</option>
+              <option value="year">Group by Year</option>
+            </select>
+            <button
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
+              onClick={() => setReportFilters(defaultReportFilters)}
+              type="button"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          <article className="rounded-lg border border-slate-200 bg-white p-3">
+            <h3 className="text-base font-semibold text-slate-900">Cashflow (Income vs Expenses)</h3>
+            <div className="mt-3 h-64 w-full">
+              {cashflowSeries.length === 0 ? (
+                <p className="text-sm text-slate-500">No cashflow data for selected filters.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={cashflowSeries}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="period" />
+                    <YAxis tickFormatter={(value) => formatCurrencyCompact(Number(value))} />
+                    <Tooltip
+                      formatter={(value) => formatCurrency(Number(value))}
+                      labelFormatter={(value) => `Period: ${String(value)}`}
+                    />
+                    <Legend />
+                    <Line dataKey="totalIncomeCents" name="Income" stroke="#0ea5e9" strokeWidth={2} />
+                    <Line dataKey="totalExpenseCents" name="Expenses" stroke="#f97316" strokeWidth={2} />
+                    <Line dataKey="netCashflowCents" name="Net Cashflow" stroke="#0f766e" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-lg border border-slate-200 bg-white p-3">
+            <h3 className="text-base font-semibold text-slate-900">Net Worth Trend</h3>
+            <div className="mt-3 h-64 w-full">
+              {netWorthSeries.length === 0 ? (
+                <p className="text-sm text-slate-500">No net worth snapshots for selected filters.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={netWorthSeries}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="period" />
+                    <YAxis tickFormatter={(value) => formatCurrencyCompact(Number(value))} />
+                    <Tooltip
+                      formatter={(value) => formatCurrency(Number(value))}
+                      labelFormatter={(value) => `Period: ${String(value)}`}
+                    />
+                    <Legend />
+                    <Line dataKey="totalAssetsCents" name="Assets" stroke="#0ea5e9" strokeWidth={2} />
+                    <Line dataKey="totalLiabilitiesCents" name="Liabilities" stroke="#ef4444" strokeWidth={2} />
+                    <Line dataKey="netWorthCents" name="Net Worth" stroke="#0f766e" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-lg border border-slate-200 bg-white p-3">
+            <h3 className="text-base font-semibold text-slate-900">Spending by Category</h3>
+            <div className="mt-3 h-64 w-full">
+              {spendingByCategory.length === 0 ? (
+                <p className="text-sm text-slate-500">No category spending data for selected filters.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={spendingByCategory}
+                      dataKey="totalCents"
+                      nameKey="category"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      label={(entry) => String(entry.category ?? "Unknown")}
+                    >
+                      {spendingByCategory.map((entry, index) => (
+                        <Cell key={`${entry.category ?? "unknown"}-${index}`} fill={chartColors[index % chartColors.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value) => formatCurrency(Number(value))}
+                      labelFormatter={(value) => `Category: ${String(value)}`}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+            {spendingByCategory.length > 0 ? (
+              <div className="mt-3 overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="text-slate-600">
+                    <tr>
+                      <th className="px-2 py-1 font-medium">Category</th>
+                      <th className="px-2 py-1 font-medium">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {spendingByCategory.map((row) => (
+                      <tr className="border-t border-slate-100" key={row.category ?? "unknown"}>
+                        <td className="px-2 py-1">{row.category ?? "Unknown"}</td>
+                        <td className="px-2 py-1">{formatCurrency(row.totalCents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </article>
+
+          <article className="rounded-lg border border-slate-200 bg-white p-3">
+            <h3 className="text-base font-semibold text-slate-900">Year-over-Year Spend</h3>
+            <div className="mt-3 h-64 w-full">
+              {yearOverYearSpend.length === 0 ? (
+                <p className="text-sm text-slate-500">No year-over-year data for selected filters.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={yearOverYearSpend}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="year" />
+                    <YAxis tickFormatter={(value) => formatCurrencyCompact(Number(value))} />
+                    <Tooltip
+                      formatter={(value) => formatCurrency(Number(value))}
+                      labelFormatter={(value) => `Year: ${String(value)}`}
+                    />
+                    <Legend />
+                    <Bar dataKey="totalExpenseCents" fill="#f97316" name="Total Spend" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+            {yearOverYearSpend.length > 0 ? (
+              <div className="mt-3 overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="text-slate-600">
+                    <tr>
+                      <th className="px-2 py-1 font-medium">Year</th>
+                      <th className="px-2 py-1 font-medium">Total Spend</th>
+                      <th className="px-2 py-1 font-medium">Change</th>
+                      <th className="px-2 py-1 font-medium">% Change</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {yearOverYearSpend.map((row) => {
+                      const changeClass =
+                        row.changeAmountCents === null
+                          ? "text-slate-500"
+                          : row.changeAmountCents > 0
+                            ? "text-red-700"
+                            : row.changeAmountCents < 0
+                              ? "text-emerald-700"
+                              : "text-slate-700";
+
+                      return (
+                        <tr className="border-t border-slate-100" key={row.year}>
+                          <td className="px-2 py-1">{row.year}</td>
+                          <td className="px-2 py-1">{formatCurrency(row.totalExpenseCents)}</td>
+                          <td className={`px-2 py-1 ${changeClass}`}>
+                            {row.changeAmountCents === null ? "--" : formatCurrency(row.changeAmountCents)}
+                          </td>
+                          <td className={`px-2 py-1 ${changeClass}`}>{formatPercent(row.changePercent)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </article>
+        </div>
+      </section>
+
       <section className="mt-4 grid gap-4 lg:grid-cols-[1.1fr,0.9fr]">
         <article className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">
-            {expenseForm.id ? "Edit Expense" : "Add Expense"}
-          </h2>
+          <h2 className="text-lg font-semibold text-slate-900">{expenseForm.id ? "Edit Expense" : "Add Expense"}</h2>
           <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={handleExpenseSubmit}>
             <label className="block">
               <span className="mb-1 block text-sm text-slate-700">Amount (USD)</span>
@@ -446,7 +1243,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
                   onClick={cancelEdit}
                   type="button"
                 >
-                  Cancel Edit
+                  Cancel
                 </button>
               ) : null}
             </div>
@@ -510,13 +1307,22 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
       <section className="mt-4 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-900">Expenses</h2>
-          <button
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
-            onClick={() => setFilters(emptyFilters)}
-            type="button"
-          >
-            Clear Filters
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
+              onClick={() => setFilters(emptyFilters)}
+              type="button"
+            >
+              Clear Filters
+            </button>
+            <button
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
+              onClick={() => exportCsv("expenses", filters.from, filters.to)}
+              type="button"
+            >
+              Export CSV
+            </button>
+          </div>
         </div>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -556,47 +1362,372 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
         </div>
 
         {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
-        {isLoading ? <p className="mt-3 text-sm text-slate-600">Loading...</p> : null}
+        {isLoadingAny ? <p className="mt-3 text-sm text-slate-600">Loading...</p> : null}
 
-        <div className="mt-4 grid gap-3">
+        <div className="mt-4 overflow-x-auto">
           {expenses.length === 0 ? (
             <p className="text-sm text-slate-500">No expenses found for current filters.</p>
           ) : (
-            expenses.map((expense) => (
-              <article
-                className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:flex sm:items-start sm:justify-between"
-                key={expense.id}
-              >
-                <div>
-                  <p className="text-base font-semibold text-slate-900">{formatCurrency(expense.amountCents)}</p>
-                  <p className="text-sm text-slate-700">
-                    {expense.payee} • {expense.categoryName ?? "Unknown"}
-                  </p>
-                  <p className="text-xs text-slate-500">{expense.spentOn}</p>
-                  {expense.note ? <p className="mt-1 text-sm text-slate-600">{expense.note}</p> : null}
-                </div>
-                <div className="mt-3 flex gap-2 sm:mt-0">
-                  <button
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 transition hover:bg-slate-100"
-                    onClick={() => beginEdit(expense)}
-                    type="button"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-50"
-                    onClick={() => void deleteExpense(expense.id)}
-                    type="button"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </article>
-            ))
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-50 text-slate-700">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Date</th>
+                  <th className="px-3 py-2 font-medium">Payee</th>
+                  <th className="px-3 py-2 font-medium">Category</th>
+                  <th className="px-3 py-2 font-medium">Amount</th>
+                  <th className="px-3 py-2 font-medium">Note</th>
+                  <th className="px-3 py-2 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expenses.map((expense) => (
+                  <tr className="border-t border-slate-100" key={expense.id}>
+                    <td className="px-3 py-2">{expense.spentOn}</td>
+                    <td className="px-3 py-2">{expense.payee}</td>
+                    <td className="px-3 py-2">{expense.categoryName ?? "Unknown"}</td>
+                    <td className="px-3 py-2">{formatCurrency(expense.amountCents)}</td>
+                    <td className="max-w-[280px] truncate px-3 py-2 text-slate-600">{expense.note ?? "--"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-2">
+                        <button
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 transition hover:bg-slate-100"
+                          onClick={() => beginEdit(expense)}
+                          type="button"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-50"
+                          onClick={() => void deleteExpense(expense.id)}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
+        </div>
+      </section>
+
+      <section className="mt-4 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">{incomeForm.id ? "Edit Income" : "Add Income"}</h2>
+        <form className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={handleIncomeSubmit}>
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-700">Amount (USD)</span>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              min="0.01"
+              onChange={(event) => setIncomeForm((current) => ({ ...current, amount: event.target.value }))}
+              placeholder="0.00"
+              required
+              step="0.01"
+              type="number"
+              value={incomeForm.amount}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-700">Earned On</span>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) => setIncomeForm((current) => ({ ...current, earnedOn: event.target.value }))}
+              required
+              type="date"
+              value={incomeForm.earnedOn}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-700">Source</span>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) => setIncomeForm((current) => ({ ...current, source: event.target.value }))}
+              required
+              type="text"
+              value={incomeForm.source}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-700">Note (Optional)</span>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) => setIncomeForm((current) => ({ ...current, note: event.target.value }))}
+              type="text"
+              value={incomeForm.note}
+            />
+          </label>
+          <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4">
+            <button
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              disabled={isSubmittingIncome}
+              type="submit"
+            >
+              {isSubmittingIncome ? "Saving..." : incomeForm.id ? "Update Income" : "Add Income"}
+            </button>
+            {incomeForm.id ? (
+              <button
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
+                onClick={cancelIncomeEdit}
+                type="button"
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        </form>
+
+        <div className="mt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-base font-semibold text-slate-900">Income Records</h3>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
+                onClick={() => setIncomeFilters(emptyIncomeFilters)}
+                type="button"
+              >
+                Clear Filters
+              </button>
+              <button
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
+                onClick={() => exportCsv("incomes", incomeFilters.from, incomeFilters.to)}
+                type="button"
+              >
+                Export CSV
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) => setIncomeFilters((current) => ({ ...current, from: event.target.value }))}
+              placeholder="From"
+              type="date"
+              value={incomeFilters.from}
+            />
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) => setIncomeFilters((current) => ({ ...current, to: event.target.value }))}
+              placeholder="To"
+              type="date"
+              value={incomeFilters.to}
+            />
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) => setIncomeFilters((current) => ({ ...current, source: event.target.value }))}
+              placeholder="Source contains..."
+              type="text"
+              value={incomeFilters.source}
+            />
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            {incomes.length === 0 ? (
+              <p className="text-sm text-slate-500">No income records found for current filters.</p>
+            ) : (
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-50 text-slate-700">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Date</th>
+                    <th className="px-3 py-2 font-medium">Source</th>
+                    <th className="px-3 py-2 font-medium">Amount</th>
+                    <th className="px-3 py-2 font-medium">Note</th>
+                    <th className="px-3 py-2 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {incomes.map((income) => (
+                    <tr className="border-t border-slate-100" key={income.id}>
+                      <td className="px-3 py-2">{income.earnedOn}</td>
+                      <td className="px-3 py-2">{income.source}</td>
+                      <td className="px-3 py-2">{formatCurrency(income.amountCents)}</td>
+                      <td className="max-w-[280px] truncate px-3 py-2 text-slate-600">{income.note ?? "--"}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex gap-2">
+                          <button
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 transition hover:bg-slate-100"
+                            onClick={() => beginIncomeEdit(income)}
+                            type="button"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-50"
+                            onClick={() => void deleteIncome(income.id)}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-4 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">
+          {snapshotForm.id ? "Edit Net Worth Snapshot" : "Add Net Worth Snapshot"}
+        </h2>
+        <form className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={handleSnapshotSubmit}>
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-700">Snapshot Date</span>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) => setSnapshotForm((current) => ({ ...current, snapshotOn: event.target.value }))}
+              required
+              type="date"
+              value={snapshotForm.snapshotOn}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-700">Total Assets (USD)</span>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              min="0"
+              onChange={(event) => setSnapshotForm((current) => ({ ...current, totalAssets: event.target.value }))}
+              placeholder="0.00"
+              required
+              step="0.01"
+              type="number"
+              value={snapshotForm.totalAssets}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-700">Total Liabilities (USD)</span>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              min="0"
+              onChange={(event) => setSnapshotForm((current) => ({ ...current, totalLiabilities: event.target.value }))}
+              placeholder="0.00"
+              required
+              step="0.01"
+              type="number"
+              value={snapshotForm.totalLiabilities}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-700">Note (Optional)</span>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) => setSnapshotForm((current) => ({ ...current, note: event.target.value }))}
+              type="text"
+              value={snapshotForm.note}
+            />
+          </label>
+          <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4">
+            <button
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              disabled={isSubmittingSnapshot}
+              type="submit"
+            >
+              {isSubmittingSnapshot ? "Saving..." : snapshotForm.id ? "Update Snapshot" : "Add Snapshot"}
+            </button>
+            {snapshotForm.id ? (
+              <button
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
+                onClick={cancelSnapshotEdit}
+                type="button"
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        </form>
+
+        <div className="mt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-base font-semibold text-slate-900">Net Worth Snapshots</h3>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
+                onClick={() => setSnapshotFilters(emptySnapshotFilters)}
+                type="button"
+              >
+                Clear Filters
+              </button>
+              <button
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
+                onClick={() => exportCsv("networth_snapshots", snapshotFilters.from, snapshotFilters.to)}
+                type="button"
+              >
+                Export CSV
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) => setSnapshotFilters((current) => ({ ...current, from: event.target.value }))}
+              placeholder="From"
+              type="date"
+              value={snapshotFilters.from}
+            />
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
+              onChange={(event) => setSnapshotFilters((current) => ({ ...current, to: event.target.value }))}
+              placeholder="To"
+              type="date"
+              value={snapshotFilters.to}
+            />
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            {snapshots.length === 0 ? (
+              <p className="text-sm text-slate-500">No net worth snapshots found for current filters.</p>
+            ) : (
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-50 text-slate-700">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Date</th>
+                    <th className="px-3 py-2 font-medium">Assets</th>
+                    <th className="px-3 py-2 font-medium">Liabilities</th>
+                    <th className="px-3 py-2 font-medium">Net Worth</th>
+                    <th className="px-3 py-2 font-medium">Note</th>
+                    <th className="px-3 py-2 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snapshots.map((snapshot) => (
+                    <tr className="border-t border-slate-100" key={snapshot.id}>
+                      <td className="px-3 py-2">{snapshot.snapshotOn}</td>
+                      <td className="px-3 py-2">{formatCurrency(snapshot.totalAssetsCents)}</td>
+                      <td className="px-3 py-2">{formatCurrency(snapshot.totalLiabilitiesCents)}</td>
+                      <td className="px-3 py-2 font-semibold text-slate-900">{formatCurrency(snapshot.netWorthCents)}</td>
+                      <td className="max-w-[280px] truncate px-3 py-2 text-slate-600">{snapshot.note ?? "--"}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex gap-2">
+                          <button
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 transition hover:bg-slate-100"
+                            onClick={() => beginSnapshotEdit(snapshot)}
+                            type="button"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-50"
+                            onClick={() => void deleteSnapshot(snapshot.id)}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </section>
     </main>
   );
 }
-
