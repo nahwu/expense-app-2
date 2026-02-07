@@ -28,7 +28,7 @@
   - `amountCents` (integer, > 0)
   - `categoryId` (uuid)
   - `spentOn` (ISO date)
-  - `payee` (string)
+  - `payee` (optional string, empty allowed)
   - `note` (optional string)
 - Creates one expense row for current user.
 
@@ -47,7 +47,7 @@
 - Body:
   - `amountCents`
   - `earnedOn`
-  - `source`
+  - `source` (optional string, empty allowed)
   - `note` (optional)
 
 `PATCH /api/incomes/:id`

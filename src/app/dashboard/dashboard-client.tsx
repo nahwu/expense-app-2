@@ -659,10 +659,6 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
       setError("Please select a date.");
       return;
     }
-    if (!expenseForm.payee.trim()) {
-      setError("Payee is required.");
-      return;
-    }
 
     setIsSubmittingExpense(true);
     try {
@@ -795,10 +791,6 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
     }
     if (!incomeForm.earnedOn) {
       setError("Income date is required.");
-      return;
-    }
-    if (!incomeForm.source.trim()) {
-      setError("Income source is required.");
       return;
     }
 
@@ -1387,7 +1379,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
           <h2 className="text-lg font-semibold text-slate-900">{expenseForm.id ? "Edit Expense" : "Add Expense"}</h2>
           <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={handleExpenseSubmit}>
             <label className="block">
-              <span className="mb-1 block text-sm text-slate-700">Amount (USD)</span>
+              <span className="mb-1 block text-sm text-slate-700">Amount</span>
               <input
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
                 min="0.01"
@@ -1428,11 +1420,10 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm text-slate-700">Payee</span>
+              <span className="mb-1 block text-sm text-slate-700">Payee (Optional)</span>
               <input
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
                 onChange={(event) => setExpenseForm((current) => ({ ...current, payee: event.target.value }))}
-                required
                 type="text"
                 value={expenseForm.payee}
               />
@@ -1599,7 +1590,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
                 {expenses.map((expense) => (
                   <tr className="border-t border-slate-100" key={expense.id}>
                     <td className="px-3 py-2">{expense.spentOn}</td>
-                    <td className="px-3 py-2">{expense.payee}</td>
+                    <td className="px-3 py-2">{expense.payee || "--"}</td>
                     <td className="px-3 py-2">{expense.categoryName ?? "Unknown"}</td>
                     <td className="px-3 py-2">{formatCurrency(expense.amountCents)}</td>
                     <td className="hidden max-w-[280px] truncate px-3 py-2 text-slate-600 md:table-cell">
@@ -1638,7 +1629,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
         <h2 className="text-lg font-semibold text-slate-900">{incomeForm.id ? "Edit Income" : "Add Income"}</h2>
         <form className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={handleIncomeSubmit}>
           <label className="block">
-            <span className="mb-1 block text-sm text-slate-700">Amount (USD)</span>
+            <span className="mb-1 block text-sm text-slate-700">Amount</span>
             <input
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
               min="0.01"
@@ -1661,11 +1652,10 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm text-slate-700">Source</span>
+            <span className="mb-1 block text-sm text-slate-700">Source (Optional)</span>
             <input
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
               onChange={(event) => setIncomeForm((current) => ({ ...current, source: event.target.value }))}
-              required
               type="text"
               value={incomeForm.source}
             />
@@ -1762,7 +1752,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
                   {incomes.map((income) => (
                     <tr className="border-t border-slate-100" key={income.id}>
                       <td className="px-3 py-2">{income.earnedOn}</td>
-                      <td className="px-3 py-2">{income.source}</td>
+                      <td className="px-3 py-2">{income.source || "--"}</td>
                       <td className="px-3 py-2">{formatCurrency(income.amountCents)}</td>
                       <td className="hidden max-w-[280px] truncate px-3 py-2 text-slate-600 md:table-cell">
                         {income.note ?? "--"}
@@ -1813,7 +1803,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm text-slate-700">Total Assets (USD)</span>
+            <span className="mb-1 block text-sm text-slate-700">Total Assets</span>
             <input
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
               min="0"
@@ -1826,7 +1816,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm text-slate-700">Total Liabilities (USD)</span>
+            <span className="mb-1 block text-sm text-slate-700">Total Liabilities</span>
             <input
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
               min="0"

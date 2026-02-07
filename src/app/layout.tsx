@@ -13,8 +13,8 @@ const displayFont = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Expense App 2",
-  description: "Self-hosted expense, income, and net worth tracker",
+  title: "ClearWorth",
+  description: "Self-hosted finance tracker for expenses, income, and net worth",
 };
 
 type RootLayoutProps = {

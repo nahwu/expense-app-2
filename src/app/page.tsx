@@ -54,7 +54,7 @@ export default async function HomePage() {
         <div className="relative grid gap-8 lg:grid-cols-[1.1fr,0.9fr]">
           <div>
             <p className="inline-flex rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-sky-100">
-              Expense App 2
+              ClearWorth
             </p>
             <h1 className="mt-4 max-w-3xl text-3xl font-semibold leading-tight tracking-tight text-white sm:text-5xl">
               Your personal finance command center, fully under your control.

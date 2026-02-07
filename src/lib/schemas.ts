@@ -8,7 +8,10 @@ export const expenseCreateSchema = z.object({
   amountCents: z.number().int().positive(),
   categoryId: z.string().uuid(),
   spentOn: isoDateSchema,
-  payee: z.string().trim().min(1).max(200),
+  payee: z.preprocess(
+    (value) => (value == null ? "" : value),
+    z.string().trim().max(200),
+  ),
   note: z.string().trim().max(4000).optional(),
 });
 
@@ -17,7 +20,10 @@ export const expenseUpdateSchema = expenseCreateSchema.partial();
 export const incomeCreateSchema = z.object({
   amountCents: z.number().int().positive(),
   earnedOn: isoDateSchema,
-  source: z.string().trim().min(1).max(200),
+  source: z.preprocess(
+    (value) => (value == null ? "" : value),
+    z.string().trim().max(200),
+  ),
   note: z.string().trim().max(4000).optional(),
 });
 

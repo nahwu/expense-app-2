@@ -1,4 +1,4 @@
-# Expense App 2
+# ClearWorth
 
 Self-hosted personal finance app for tracking expenses, optional income, and optional net worth snapshots.
 
