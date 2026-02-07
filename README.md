@@ -16,6 +16,17 @@ Not implemented yet:
 - CSV import processing (endpoint scaffold exists and currently returns `501`).
 - MFA, audit logging, backup automation/restore validation, CI hardening tasks from roadmap.
 
+## Key Tech Stack
+
+- Next.js 16 (App Router) + React 19
+- TypeScript 5 (strict mode)
+- PostgreSQL 18 with direct SQL (`pg`)
+- Auth.js / NextAuth credentials flow
+- Zod validation for API payloads
+- Recharts for dashboard/report visualizations
+- Tailwind CSS 4 for styling
+- Vitest for automated tests
+
 ## Product Scope
 
 - CRUD expenses with `amount`, `category`, `date`, optional `payee`, and `notes`.
