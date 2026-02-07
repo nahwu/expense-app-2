@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
 import {
   Bar,
@@ -139,6 +139,7 @@ type ReportFilters = {
 };
 
 type ExportEntity = "expenses" | "incomes" | "networth_snapshots";
+type DashboardSectionId = "overview" | "reports" | "expenses" | "income" | "networth";
 
 type ExpenseApi = Omit<Expense, "amountCents"> & { amountCents: number | string };
 type IncomeApi = Omit<Income, "amountCents"> & { amountCents: number | string };
@@ -311,6 +312,14 @@ const defaultReportFilters: ReportFilters = {
   groupBy: "month",
 };
 
+const dashboardSections: Array<{ id: DashboardSectionId; label: string; shortLabel: string }> = [
+  { id: "overview", label: "Overview", shortLabel: "OV" },
+  { id: "reports", label: "Reports", shortLabel: "RP" },
+  { id: "expenses", label: "Expenses", shortLabel: "EX" },
+  { id: "income", label: "Income", shortLabel: "IN" },
+  { id: "networth", label: "Net Worth", shortLabel: "NW" },
+];
+
 export default function DashboardClient({ userEmail }: DashboardClientProps) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -346,6 +355,10 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
   const [isSubmittingIncome, setIsSubmittingIncome] = useState(false);
   const [isSubmittingSnapshot, setIsSubmittingSnapshot] = useState(false);
   const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
+  const [isDesktopNavCollapsed, setIsDesktopNavCollapsed] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<DashboardSectionId>("overview");
+  const expenseAmountInputRef = useRef<HTMLInputElement | null>(null);
 
   const isLoadingAny =
     isLoadingCategories ||
@@ -361,6 +374,29 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
     const message = loadError instanceof Error ? loadError.message : fallback;
     setError(message);
   }, []);
+
+  function scrollToSection(sectionId: DashboardSectionId) {
+    setActiveSection(sectionId);
+    setIsMobileNavOpen(false);
+
+    const section = document.getElementById(sectionId);
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function startQuickAddExpense() {
+    setExpenseForm((current) => ({
+      ...emptyExpenseForm,
+      categoryId: current.categoryId || categories[0]?.id || "",
+      spentOn: todayIso,
+    }));
+    setError(null);
+    scrollToSection("expenses");
+    window.setTimeout(() => {
+      expenseAmountInputRef.current?.focus();
+    }, 260);
+  }
 
   const loadCategories = useCallback(async () => {
     setIsLoadingCategories(true);
@@ -593,6 +629,18 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
       setRequestError(loadError, "Failed to load reports.");
     });
   }, [loadReports, reportFilters, setRequestError]);
+
+  useEffect(() => {
+    if (!isMobileNavOpen) {
+      document.body.style.removeProperty("overflow");
+      return;
+    }
+
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.removeProperty("overflow");
+    };
+  }, [isMobileNavOpen]);
 
   async function handleExpenseSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -917,25 +965,186 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-4 py-6 sm:px-8">
-      <header className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-slate-600">Signed in as {userEmail}</p>
-            <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">Expense Dashboard</h1>
-          </div>
+    <div className="relative min-h-screen bg-[radial-gradient(circle_at_12%_12%,rgba(56,189,248,0.20)_0,transparent_36%),radial-gradient(circle_at_90%_0%,rgba(14,165,233,0.20)_0,transparent_30%),radial-gradient(circle_at_96%_78%,rgba(20,184,166,0.20)_0,transparent_28%),linear-gradient(180deg,#f8fafc_0%,#eff6ff_100%)]">
+      <div
+        className={`fixed inset-0 z-30 bg-slate-950/35 backdrop-blur-sm transition md:hidden ${
+          isMobileNavOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={() => setIsMobileNavOpen(false)}
+      />
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 hidden border-r border-white/60 bg-white/75 p-4 shadow-[0_20px_60px_-28px_rgba(15,23,42,0.55)] backdrop-blur-xl transition-all duration-300 md:flex md:flex-col ${
+          isDesktopNavCollapsed ? "w-20" : "w-72"
+        }`}
+      >
+        <div className="mb-6 flex items-center justify-between">
+          {isDesktopNavCollapsed ? (
+            <span className="mx-auto rounded-xl bg-slate-900 px-2 py-1 text-xs font-semibold text-white">EA2</span>
+          ) : (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Workspace</p>
+              <p className="text-lg font-semibold text-slate-900">Finance Studio</p>
+            </div>
+          )}
           <button
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+            onClick={() => setIsDesktopNavCollapsed((current) => !current)}
             type="button"
           >
-            Sign Out
+            {isDesktopNavCollapsed ? ">" : "<"}
           </button>
         </div>
-      </header>
 
-      <section className="mt-4 grid gap-4 sm:grid-cols-2">
-        <article className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+        <nav className="space-y-2">
+          {dashboardSections.map((section) => {
+            const isActive = activeSection === section.id;
+            return (
+              <button
+                className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-sm font-medium transition ${
+                  isActive
+                    ? "bg-slate-900 text-white shadow-[0_14px_24px_-18px_rgba(15,23,42,0.8)]"
+                    : "text-slate-700 hover:bg-slate-100"
+                }`}
+                key={section.id}
+                onClick={() => scrollToSection(section.id)}
+                type="button"
+              >
+                <span
+                  className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-semibold ${
+                    isActive ? "bg-white/20 text-white" : "bg-white text-slate-700"
+                  }`}
+                >
+                  {section.shortLabel}
+                </span>
+                {!isDesktopNavCollapsed ? <span>{section.label}</span> : null}
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-white/60 bg-white/90 p-5 shadow-[0_24px_70px_-26px_rgba(15,23,42,0.6)] backdrop-blur-xl transition-transform duration-300 md:hidden ${
+          isMobileNavOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Navigate</p>
+            <p className="text-lg font-semibold text-slate-900">Finance Studio</p>
+          </div>
+          <button
+            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+            onClick={() => setIsMobileNavOpen(false)}
+            type="button"
+          >
+            Close
+          </button>
+        </div>
+        <nav className="space-y-2">
+          {dashboardSections.map((section) => {
+            const isActive = activeSection === section.id;
+            return (
+              <button
+                className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-sm font-medium transition ${
+                  isActive
+                    ? "bg-slate-900 text-white shadow-[0_14px_24px_-18px_rgba(15,23,42,0.8)]"
+                    : "text-slate-700 hover:bg-slate-100"
+                }`}
+                key={section.id}
+                onClick={() => scrollToSection(section.id)}
+                type="button"
+              >
+                <span
+                  className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-semibold ${
+                    isActive ? "bg-white/20 text-white" : "bg-white text-slate-700"
+                  }`}
+                >
+                  {section.shortLabel}
+                </span>
+                <span>{section.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
+      <div className="fixed inset-x-3 bottom-3 z-40 md:hidden">
+        <div className="grid grid-cols-3 items-center gap-2 rounded-2xl border border-white/70 bg-white/90 p-2 shadow-[0_20px_50px_-26px_rgba(15,23,42,0.75)] backdrop-blur-xl">
+          <button
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+            onClick={() => setIsMobileNavOpen(true)}
+            type="button"
+          >
+            Menu
+          </button>
+          <button
+            className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-700"
+            onClick={startQuickAddExpense}
+            type="button"
+          >
+            Add Expense
+          </button>
+          <button
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+            onClick={() => scrollToSection("reports")}
+            type="button"
+          >
+            Reports
+          </button>
+        </div>
+      </div>
+
+      <button
+        aria-label="Quick add expense"
+        className="fixed bottom-24 right-4 z-40 inline-flex h-14 items-center justify-center rounded-full bg-slate-900 px-5 text-sm font-semibold text-white shadow-[0_20px_42px_-18px_rgba(15,23,42,0.75)] transition hover:bg-slate-700 md:bottom-6 md:right-6"
+        onClick={startQuickAddExpense}
+        type="button"
+      >
+        + Expense
+      </button>
+
+      <main
+        className={`mx-auto min-h-screen max-w-[120rem] px-4 pb-32 pt-6 transition-all duration-300 sm:px-8 md:pb-8 ${
+          isDesktopNavCollapsed ? "md:ml-20" : "md:ml-72"
+        }`}
+      >
+        <header
+          className="rounded-3xl border border-white/65 bg-gradient-to-br from-slate-900 via-slate-800 to-sky-900 p-6 text-white shadow-[0_28px_60px_-28px_rgba(2,6,23,0.8)]"
+          id="overview"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div>
+                <p className="text-sm font-medium text-sky-100">Signed in as {userEmail}</p>
+                <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">Finance Command Center</h1>
+                <p className="mt-1 text-sm text-sky-100/90">
+                  Manage expenses, income, snapshots, and reports from one place.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                className="hidden rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-xs font-semibold backdrop-blur transition hover:bg-white/20 md:inline-flex"
+                onClick={() => setIsDesktopNavCollapsed((current) => !current)}
+                type="button"
+              >
+                {isDesktopNavCollapsed ? "Expand Menu" : "Collapse Menu"}
+              </button>
+              <button
+                className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                type="button"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </header>
+
+      <section className="mt-5 grid scroll-mt-24 gap-4 sm:grid-cols-2">
+        <article className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white to-sky-50 p-5 shadow-[0_22px_40px_-28px_rgba(2,6,23,0.7)]">
           <p className="text-sm font-medium text-slate-500">Current Month Spending</p>
           <p className="mt-2 text-2xl font-semibold text-slate-900">
             {monthSummary ? formatCurrency(monthSummary.totalSpendingCents) : "--"}
@@ -947,7 +1156,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
             Net cashflow: {monthSummary ? formatCurrency(monthSummary.netCashflowCents) : "--"}
           </p>
         </article>
-        <article className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+        <article className="rounded-3xl border border-teal-100/80 bg-gradient-to-br from-white to-teal-50 p-5 shadow-[0_22px_40px_-28px_rgba(2,6,23,0.7)]">
           <p className="text-sm font-medium text-slate-500">Current Year Spending</p>
           <p className="mt-2 text-2xl font-semibold text-slate-900">
             {yearSummary ? formatCurrency(yearSummary.totalSpendingCents) : "--"}
@@ -961,7 +1170,10 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
         </article>
       </section>
 
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+      <section
+        className="mt-6 scroll-mt-24 rounded-3xl border border-white/65 bg-white/80 p-5 shadow-[0_24px_60px_-34px_rgba(15,23,42,0.65)] backdrop-blur"
+        id="reports"
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-900">Reporting</h2>
           <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-4">
@@ -1003,7 +1215,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
         </div>
 
         <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          <article className="rounded-lg border border-slate-200 bg-white p-3">
+          <article className="rounded-2xl border border-slate-200/70 bg-white/90 p-4 shadow-[0_18px_30px_-24px_rgba(15,23,42,0.6)]">
             <h3 className="text-base font-semibold text-slate-900">Cashflow (Income vs Expenses)</h3>
             <div className="mt-3 h-64 w-full">
               {cashflowSeries.length === 0 ? (
@@ -1028,7 +1240,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
             </div>
           </article>
 
-          <article className="rounded-lg border border-slate-200 bg-white p-3">
+          <article className="rounded-2xl border border-slate-200/70 bg-white/90 p-4 shadow-[0_18px_30px_-24px_rgba(15,23,42,0.6)]">
             <h3 className="text-base font-semibold text-slate-900">Net Worth Trend</h3>
             <div className="mt-3 h-64 w-full">
               {netWorthSeries.length === 0 ? (
@@ -1053,7 +1265,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
             </div>
           </article>
 
-          <article className="rounded-lg border border-slate-200 bg-white p-3">
+          <article className="rounded-2xl border border-slate-200/70 bg-white/90 p-4 shadow-[0_18px_30px_-24px_rgba(15,23,42,0.6)]">
             <h3 className="text-base font-semibold text-slate-900">Spending by Category</h3>
             <div className="mt-3 h-64 w-full">
               {spendingByCategory.length === 0 ? (
@@ -1105,7 +1317,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
             ) : null}
           </article>
 
-          <article className="rounded-lg border border-slate-200 bg-white p-3">
+          <article className="rounded-2xl border border-slate-200/70 bg-white/90 p-4 shadow-[0_18px_30px_-24px_rgba(15,23,42,0.6)]">
             <h3 className="text-base font-semibold text-slate-900">Year-over-Year Spend</h3>
             <div className="mt-3 h-64 w-full">
               {yearOverYearSpend.length === 0 ? (
@@ -1167,8 +1379,11 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
         </div>
       </section>
 
-      <section className="mt-4 grid gap-4 lg:grid-cols-[1.1fr,0.9fr]">
-        <article className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+      <section
+        className="mt-6 grid scroll-mt-24 gap-4 rounded-3xl border border-white/65 bg-white/75 p-5 shadow-[0_24px_60px_-34px_rgba(15,23,42,0.65)] backdrop-blur lg:grid-cols-[1.1fr,0.9fr]"
+        id="expenses"
+      >
+        <article className="rounded-2xl border border-slate-200/70 bg-white/90 p-4 shadow-[0_16px_30px_-24px_rgba(15,23,42,0.6)]">
           <h2 className="text-lg font-semibold text-slate-900">{expenseForm.id ? "Edit Expense" : "Add Expense"}</h2>
           <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={handleExpenseSubmit}>
             <label className="block">
@@ -1179,6 +1394,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
                 onChange={(event) => setExpenseForm((current) => ({ ...current, amount: event.target.value }))}
                 placeholder="0.00"
                 required
+                ref={expenseAmountInputRef}
                 step="0.01"
                 type="number"
                 value={expenseForm.amount}
@@ -1250,7 +1466,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
           </form>
         </article>
 
-        <article className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+        <article className="rounded-2xl border border-slate-200/70 bg-white/90 p-4 shadow-[0_16px_30px_-24px_rgba(15,23,42,0.6)]">
           <h2 className="text-lg font-semibold text-slate-900">Categories</h2>
           <form className="mt-3 flex gap-2" onSubmit={createCategory}>
             <input
@@ -1304,7 +1520,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
         </article>
       </section>
 
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+      <section className="mt-6 rounded-3xl border border-white/65 bg-white/80 p-5 shadow-[0_24px_60px_-34px_rgba(15,23,42,0.65)] backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-900">Expenses</h2>
           <div className="flex flex-wrap gap-2">
@@ -1375,7 +1591,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
                   <th className="px-3 py-2 font-medium">Payee</th>
                   <th className="px-3 py-2 font-medium">Category</th>
                   <th className="px-3 py-2 font-medium">Amount</th>
-                  <th className="px-3 py-2 font-medium">Note</th>
+                  <th className="hidden px-3 py-2 font-medium md:table-cell">Note</th>
                   <th className="px-3 py-2 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -1386,7 +1602,9 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
                     <td className="px-3 py-2">{expense.payee}</td>
                     <td className="px-3 py-2">{expense.categoryName ?? "Unknown"}</td>
                     <td className="px-3 py-2">{formatCurrency(expense.amountCents)}</td>
-                    <td className="max-w-[280px] truncate px-3 py-2 text-slate-600">{expense.note ?? "--"}</td>
+                    <td className="hidden max-w-[280px] truncate px-3 py-2 text-slate-600 md:table-cell">
+                      {expense.note ?? "--"}
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex gap-2">
                         <button
@@ -1413,7 +1631,10 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
         </div>
       </section>
 
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+      <section
+        className="mt-6 scroll-mt-24 rounded-3xl border border-white/65 bg-white/80 p-5 shadow-[0_24px_60px_-34px_rgba(15,23,42,0.65)] backdrop-blur"
+        id="income"
+      >
         <h2 className="text-lg font-semibold text-slate-900">{incomeForm.id ? "Edit Income" : "Add Income"}</h2>
         <form className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={handleIncomeSubmit}>
           <label className="block">
@@ -1533,7 +1754,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
                     <th className="px-3 py-2 font-medium">Date</th>
                     <th className="px-3 py-2 font-medium">Source</th>
                     <th className="px-3 py-2 font-medium">Amount</th>
-                    <th className="px-3 py-2 font-medium">Note</th>
+                    <th className="hidden px-3 py-2 font-medium md:table-cell">Note</th>
                     <th className="px-3 py-2 font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -1543,7 +1764,9 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
                       <td className="px-3 py-2">{income.earnedOn}</td>
                       <td className="px-3 py-2">{income.source}</td>
                       <td className="px-3 py-2">{formatCurrency(income.amountCents)}</td>
-                      <td className="max-w-[280px] truncate px-3 py-2 text-slate-600">{income.note ?? "--"}</td>
+                      <td className="hidden max-w-[280px] truncate px-3 py-2 text-slate-600 md:table-cell">
+                        {income.note ?? "--"}
+                      </td>
                       <td className="px-3 py-2">
                         <div className="flex gap-2">
                           <button
@@ -1571,7 +1794,10 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
         </div>
       </section>
 
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+      <section
+        className="mt-6 scroll-mt-24 rounded-3xl border border-white/65 bg-white/80 p-5 shadow-[0_24px_60px_-34px_rgba(15,23,42,0.65)] backdrop-blur"
+        id="networth"
+      >
         <h2 className="text-lg font-semibold text-slate-900">
           {snapshotForm.id ? "Edit Net Worth Snapshot" : "Add Net Worth Snapshot"}
         </h2>
@@ -1690,7 +1916,7 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
                     <th className="px-3 py-2 font-medium">Assets</th>
                     <th className="px-3 py-2 font-medium">Liabilities</th>
                     <th className="px-3 py-2 font-medium">Net Worth</th>
-                    <th className="px-3 py-2 font-medium">Note</th>
+                    <th className="hidden px-3 py-2 font-medium md:table-cell">Note</th>
                     <th className="px-3 py-2 font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -1701,7 +1927,9 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
                       <td className="px-3 py-2">{formatCurrency(snapshot.totalAssetsCents)}</td>
                       <td className="px-3 py-2">{formatCurrency(snapshot.totalLiabilitiesCents)}</td>
                       <td className="px-3 py-2 font-semibold text-slate-900">{formatCurrency(snapshot.netWorthCents)}</td>
-                      <td className="max-w-[280px] truncate px-3 py-2 text-slate-600">{snapshot.note ?? "--"}</td>
+                      <td className="hidden max-w-[280px] truncate px-3 py-2 text-slate-600 md:table-cell">
+                        {snapshot.note ?? "--"}
+                      </td>
                       <td className="px-3 py-2">
                         <div className="flex gap-2">
                           <button
@@ -1729,5 +1957,6 @@ export default function DashboardClient({ userEmail }: DashboardClientProps) {
         </div>
       </section>
     </main>
+    </div>
   );
 }
